@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Weekly Activity Log</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', sans-serif; background: #eef2ff; padding: 20px; }
+        .container { max-width: 1200px; margin: auto; background: white; border-radius: 15px; padding: 20px; box-shadow: 0 0 20px rgba(0,0,0,0.1); }
+        .header { text-align: center; padding: 20px; background: #667eea; color: white; border-radius: 10px; margin-bottom: 20px; }
+        h1 { margin-bottom: 10px; }
+        .week-nav { display: flex; justify-content: space-between; align-items: center; padding: 10px; background: #f1f3ff; border-radius: 10px; margin-bottom: 20px; }
+        .week-nav button { background: #667eea; border: none; color: white; padding: 10px 20px; border-radius: 6px; cursor: pointer; }
+        .day-tabs { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+        .day-tab { flex: 1; min-width: 100px; background: #e3e6ff; border: none; padding: 12px; border-radius: 8px; text-align: center; cursor: pointer; }
+        .day-tab.active { background: #667eea; color: white; font-weight: bold; }
+        .schedule-table { width: 100%; border-collapse: collapse; }
+        .schedule-table th { background: #667eea; color: white; padding: 10px; }
+        .schedule-table td { padding: 10px; border-bottom: 1px solid #ddd; }
+        .activity-input { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px; }
+        .save-btn { margin-top: 20px; width: 100%; background: #28a745; color: white; padding: 12px; border: none; border-radius: 8px; font-size: 16px; cursor: pointer; }
+        #saveStatus { text-align: center; margin-top: 10px; font-weight: bold; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h1>Weekly Activity Log</h1>
+        <p>Track your daily activities hour by hour</p>
+    </div>
+
+    <div class="week-nav">
+        <button onclick="changeWeek(-1)">← Previous</button>
+        <div id="currentWeek"></div>
+        <button onclick="changeWeek(1)">Next →</button>
+    </div>
+
+    <div id="dayTabs" class="day-tabs"></div>
+
+    <table class="schedule-table">
+        <thead>
+        <tr>
+            <th>Hour</th>
+            <th>Activity</th>
+        </tr>
+        </thead>
+        <tbody id="scheduleBody"></tbody>
+    </table>
+
+    <button class="save-btn" onclick="saveActivities()">Save</button>
+    <div id="saveStatus"></div>
+</div>
+
+<script>
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzCnudXj2NhP04g0WBGlwGUS21TWld2pRG_lllu_lJ9Jv-WtpE-GdAQ4B88QMkkLw_8/exec"; // Replace with your Apps Script Web App URL
+
+let currentWeekOffset = 0;
+let selectedDay = new Date();
+
+function init() {
+    updateWeek();
+    renderDayTabs();
+    renderSchedule();
+}
+
+function getWeekDates(offset) {
+    const today = new Date();
+    const day = today.getDay();
+    const diff = day === 0 ? -6 : 1 - day;
+    const monday = new Date(today);
+    monday.setDate(today.getDate() + diff + offset * 7);
+
+    const days = [];
+    for (let i = 0; i < 7; i++) {
+        let d = new Date(monday);
+        d.setDate(monday.getDate() + i);
+        days.push(d);
+    }
+    return days;
+}
+
+function updateWeek() {
+    const dates = getWeekDates(currentWeekOffset);
+    document.getElementById("currentWeek").innerText =
+        `${dates[0].toLocaleDateString()} - ${dates[6].toLocaleDateString()}`;
+}
+
+function renderDayTabs() {
+    const tabs = document.getElementById("dayTabs");
+    tabs.innerHTML = "";
+    const dates = getWeekDates(currentWeekOffset);
+    const names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+    dates.forEach((date, i) => {
+        const btn = document.createElement("button");
+        btn.className = "day-tab";
+        if (date.toDateString() === selectedDay.toDateString()) btn.classList.add("active");
+        btn.innerHTML = `${names[i]}<br>${date.getDate()}`;
+        btn.onclick = () => { selectedDay = date; renderDayTabs(); renderSchedule(); };
+        tabs.appendChild(btn);
+    });
+}
+
+function renderSchedule() {
+    const body = document.getElementById("scheduleBody");
+    body.innerHTML = "";
+    const dateKey = selectedDay.toISOString().split("T")[0];
+    const savedData = JSON.parse(localStorage.getItem(dateKey) || "{}");
+
+    for (let hour = 1; hour <= 24; hour++) {
+        const row = document.createElement("tr");
+        row.innerHTML = `
+            <td>${hour}:00</td>
+            <td><input class="activity-input" id="h${hour}" placeholder="Enter activity" value="${savedData[hour] || ''}"></td>
+        `;
+        body.appendChild(row);
+    }
+}
+
+async function saveActivities() {
+    const date = selectedDay.toISOString().split("T")[0];
+    const localSave = {};
+
+    for (let i = 1; i <= 24; i++) {
+        const val = document.getElementById(`h${i}`).value.trim();
+        if (!val) continue;
+
+        localSave[i] = val; // Save locally
+
+        const form = new URLSearchParams();
+        form.append("date", date);
+        form.append("hour", i);
+        form.append("entry", val);
+        form.append("source", "web-app");
+
+        await fetch(SCRIPT_URL, {
+            method: "POST",
+            body: form,
+            headers: { "Content-Type": "application/x-www-form-urlencoded" }
+        });
+    }
+
+    localStorage.setItem(date, JSON.stringify(localSave));
+    document.getElementById("saveStatus").innerText = "Saved locally & synced to Sheets!";
+}
+
+function changeWeek(dir) {
+    currentWeekOffset += dir;
+    updateWeek();
+    renderDayTabs();
+    renderSchedule();
+}
+
+init();
+</script>
+</body>
+</html>
+
