@@ -20,6 +20,7 @@
         .schedule-table td { padding: 10px; border-bottom: 1px solid #ddd; }
         .activity-input { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px; }
         .save-btn { margin-top: 20px; width: 100%; background: #28a745; color: white; padding: 12px; border: none; border-radius: 8px; font-size: 16px; cursor: pointer; }
+        #syncBtn { background: #0066cc; }
         #saveStatus { text-align: center; margin-top: 10px; font-weight: bold; }
     </style>
 </head>
@@ -29,6 +30,8 @@
         <h1>Weekly Activity Log</h1>
         <p>Track your daily activities hour by hour</p>
     </div>
+
+    <div id="usernameDisplay" style="text-align:center; font-weight:bold; margin-bottom:15px;"></div>
 
     <div class="week-nav">
         <button onclick="changeWeek(-1)">← Previous</button>
@@ -48,17 +51,33 @@
         <tbody id="scheduleBody"></tbody>
     </table>
 
-    <button class="save-btn" onclick="saveActivities()">Save</button>
+    <button class="save-btn" onclick="saveLocal()">Save Locally</button>
+    <button class="save-btn" id="syncBtn" onclick="syncToSheets()">Save to Google Sheets</button>
+
     <div id="saveStatus"></div>
 </div>
 
 <script>
-const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzCnudXj2NhP04g0WBGlwGUS21TWld2pRG_lllu_lJ9Jv-WtpE-GdAQ4B88QMkkLw_8/exec"; // Replace with your Apps Script Web App URL
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyfvfiL_EKBnAEF6KryPQK2u6KO9EbuJ_N4R5xsSUG9_hJUykvjDW0R0_-eutGFCldy/exec";
 
 let currentWeekOffset = 0;
 let selectedDay = new Date();
+let username = localStorage.getItem("username");
+
+function askUsername() {
+    if (!username) {
+        username = prompt("Enter your name:");
+        if (!username || username.trim() === "") {
+            alert("Name is required.");
+            return askUsername();
+        }
+        localStorage.setItem("username", username);
+    }
+    document.getElementById("usernameDisplay").innerText = "Logged in as: " + username;
+}
 
 function init() {
+    askUsername();
     updateWeek();
     renderDayTabs();
     renderSchedule();
@@ -118,17 +137,28 @@ function renderSchedule() {
     }
 }
 
-async function saveActivities() {
+function saveLocal() {
     const date = selectedDay.toISOString().split("T")[0];
     const localSave = {};
 
     for (let i = 1; i <= 24; i++) {
         const val = document.getElementById(`h${i}`).value.trim();
+        if (val) localSave[i] = val;
+    }
+
+    localStorage.setItem(date, JSON.stringify(localSave));
+    document.getElementById("saveStatus").innerText = "Saved locally!";
+}
+
+async function syncToSheets() {
+    const date = selectedDay.toISOString().split("T")[0];
+
+    for (let i = 1; i <= 24; i++) {
+        const val = document.getElementById(`h${i}`).value.trim();
         if (!val) continue;
 
-        localSave[i] = val; // Save locally
-
         const form = new URLSearchParams();
+        form.append("username", username);
         form.append("date", date);
         form.append("hour", i);
         form.append("entry", val);
@@ -141,8 +171,7 @@ async function saveActivities() {
         });
     }
 
-    localStorage.setItem(date, JSON.stringify(localSave));
-    document.getElementById("saveStatus").innerText = "Saved locally & synced to Sheets!";
+    document.getElementById("saveStatus").innerText = "Synced to Google Sheets!";
 }
 
 function changeWeek(dir) {
@@ -156,4 +185,3 @@ init();
 </script>
 </body>
 </html>
-
